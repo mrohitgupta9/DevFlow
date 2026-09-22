@@ -1,0 +1,19 @@
+{
+  "name": "devflow-backend",
+  "version": "1.0.0",
+  "description": "Backend API for DevFlow engineering platform",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "keywords": [
+    "devflow",
+    "software-engineering",
+    "developer-tools",
+    "devops"
+  ],
+  "author": "",
+  "license": "ISC"
+}
