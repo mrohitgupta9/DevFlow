@@ -5,43 +5,40 @@ const redisClient = createClient({
 });
 
 redisClient.on("error", (error) => {
-  console.error("✗ Redis error:", error.message);
+  console.error("Redis error:", error);
 });
 
 redisClient.on("connect", () => {
-  console.log("→ Redis connecting...");
+  console.log("Redis connecting...");
 });
 
 redisClient.on("ready", () => {
-  console.log("✓ Redis ready");
+  console.log("Redis ready");
 });
 
 const connectRedis = async () => {
   try {
-    if (!redisClient.isOpen) {
-      await redisClient.connect();
-    }
+    await redisClient.connect();
+    console.log("Redis connected");
   } catch (error) {
-    console.error("✗ Redis connection failed");
-    console.error(`  ${error.message}`);
-
-    process.exit(1);
+    console.error("Redis connection failed:", error);
+    throw error;
   }
 };
 
 const disconnectRedis = async () => {
-  try {
-    if (redisClient.isOpen) {
-      await redisClient.quit();
-      console.log("✓ Redis disconnected");
-    }
-  } catch (error) {
-    console.error("✗ Redis disconnect failed");
+  if (redisClient.isOpen) {
+    await redisClient.quit();
   }
 };
+
+const getRedisStatus = () => ({
+  connected: redisClient.isReady,
+});
 
 module.exports = {
   redisClient,
   connectRedis,
   disconnectRedis,
+  getRedisStatus,
 };
