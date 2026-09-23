@@ -6,18 +6,14 @@ const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 
-const {
-  connectDatabase,
-  disconnectDatabase,
-} = require("./config/database");
+const { connectDatabase, disconnectDatabase } = require("./config/database");
 
-const {
-  connectRedis,
-  disconnectRedis,
-} = require("./config/redis");
+const { connectRedis, disconnectRedis } = require("./config/redis");
 
 const authRoutes = require("./routes/authRoutes");
-
+const organizationRoutes = require("./routes/organizationRoutes");
+const projectRoutes = require("./routes/projectRoutes");
+const serviceRoutes = require("./routes/serviceRoutes");
 // =====================================================
 // APP CONFIG
 // =====================================================
@@ -26,8 +22,8 @@ const app = express();
 
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const CLIENT_URL =
-  process.env.CLIENT_URL || "http://localhost:5173";
+
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // =====================================================
 // SECURITY
@@ -40,14 +36,14 @@ app.use(
     crossOriginResourcePolicy: {
       policy: "cross-origin",
     },
-  })
+  }),
 );
 
 app.use(
   cors({
     origin: CLIENT_URL,
     credentials: true,
-  })
+  }),
 );
 
 // =====================================================
@@ -57,14 +53,14 @@ app.use(
 app.use(
   express.json({
     limit: "10kb",
-  })
+  }),
 );
 
 app.use(
   express.urlencoded({
     extended: true,
     limit: "10kb",
-  })
+  }),
 );
 
 app.use(cookieParser());
@@ -100,7 +96,7 @@ if (NODE_ENV === "development") {
       const duration = Date.now() - start;
 
       console.log(
-        `${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`
+        `${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`,
       );
     });
 
@@ -141,6 +137,23 @@ app.get("/health", (req, res) => {
 // Authentication
 app.use("/api/auth", authRoutes);
 
+// Organizations
+app.use("/api/organizations", organizationRoutes);
+
+// Projects
+//
+// IMPORTANT:
+// projectRoutes.js already contains:
+// /organizations/:id/projects
+//
+// Therefore mount it on /api.
+// Final endpoint becomes:
+//
+// /api/organizations/:id/projects
+//
+app.use("/api", projectRoutes);
+app.use("/api", serviceRoutes);
+
 // =====================================================
 // 404 HANDLER
 // =====================================================
@@ -171,9 +184,7 @@ app.use((error, req, res, next) => {
   // -----------------------------------------------
 
   if (error.name === "ValidationError") {
-    const errors = Object.values(error.errors).map(
-      (item) => item.message
-    );
+    const errors = Object.values(error.errors).map((item) => item.message);
 
     return res.status(400).json({
       success: false,
@@ -248,7 +259,9 @@ const startServer = async () => {
     console.log("========================================");
 
     console.log(`Environment : ${NODE_ENV}`);
+
     console.log(`Port        : ${PORT}`);
+
     console.log(`Client URL  : ${CLIENT_URL}`);
 
     // -----------------------------------------------
@@ -270,21 +283,47 @@ const startServer = async () => {
     const server = app.listen(PORT, () => {
       console.log("");
       console.log("✓ MongoDB connected");
+
       console.log("✓ Redis connected");
+
       console.log(`✓ DevFlow API running on port ${PORT}`);
+
       console.log(`✓ http://localhost:${PORT}`);
+
       console.log("");
+
       console.log("Available endpoints:");
-      console.log(`  GET  /`);
-      console.log(`  GET  /health`);
-      console.log(`  POST /api/auth/register`);
-      console.log(`  POST /api/auth/login`);
-      console.log(`  GET  /api/auth/me`);
-      console.log(`  POST /api/auth/logout`);
+
+      console.log("  GET  /");
+
+      console.log("  GET  /health");
+
+      console.log("  POST /api/auth/register");
+
+      console.log("  POST /api/auth/login");
+
+      console.log("  GET  /api/auth/me");
+
+      console.log("  POST /api/auth/logout");
+
+      console.log("  GET  /api/organizations");
+
+      console.log("  GET  /api/organizations/:id");
+
+      console.log("  GET  /api/organizations/:id/members");
+
+      console.log("  GET  /api/organizations/:id/projects");
+
+      console.log("  POST /api/organizations/:id/projects");
+
       console.log("");
+
       console.log("========================================");
+
       console.log("DevFlow Backend Ready");
+
       console.log("========================================");
+
       console.log("");
     });
 
@@ -308,29 +347,29 @@ const startServer = async () => {
       server.close(async () => {
         try {
           await disconnectRedis();
+
           await disconnectDatabase();
 
           console.log("✓ Redis disconnected");
+
           console.log("✓ MongoDB disconnected");
+
           console.log("✓ DevFlow shutdown complete");
+
           console.log("");
 
           process.exit(0);
         } catch (error) {
-          console.error(
-            "✗ Error during shutdown:",
-            error.message
-          );
+          console.error("✗ Error during shutdown:", error.message);
 
           process.exit(1);
         }
       });
 
       // Force shutdown after 10 seconds
+
       setTimeout(() => {
-        console.error(
-          "✗ Graceful shutdown timed out. Forcing exit."
-        );
+        console.error("✗ Graceful shutdown timed out. Forcing exit.");
 
         process.exit(1);
       }, 10000).unref();
@@ -362,16 +401,22 @@ const startServer = async () => {
     process.on("uncaughtException", (error) => {
       console.error("");
       console.error("✗ Uncaught Exception:");
+
       console.error(error.stack || error.message);
 
       gracefulShutdown("uncaughtException");
     });
   } catch (error) {
     console.error("");
+
     console.error("========================================");
+
     console.error("✗ DevFlow failed to start");
+
     console.error("========================================");
+
     console.error(error.stack || error.message);
+
     console.error("");
 
     process.exit(1);
