@@ -45,10 +45,13 @@ const organizationSchema = new mongoose.Schema(
   }
 );
 
-organizationSchema.index({ owner: 1 });
-organizationSchema.index({ slug: 1 });
+// =====================================================
+// INDEXES
+// =====================================================
 
-module.exports = mongoose.model(
-  "Organization",
-  organizationSchema
-);
+organizationSchema.index({ owner: 1 });
+
+// slug index is already created by `unique: true`
+// Do not add organizationSchema.index({ slug: 1 })
+
+module.exports = mongoose.model("Organization", organizationSchema);
