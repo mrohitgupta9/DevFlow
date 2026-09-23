@@ -16,20 +16,36 @@ const {
   disconnectRedis,
 } = require("./config/redis");
 
+const authRoutes = require("./routes/authRoutes");
+
+// =====================================================
+// APP CONFIG
+// =====================================================
+
 const app = express();
 
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || "development";
+const CLIENT_URL =
+  process.env.CLIENT_URL || "http://localhost:5173";
 
 // =====================================================
 // SECURITY
 // =====================================================
 
-app.use(helmet());
+app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
+  })
+);
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: CLIENT_URL,
     credentials: true,
   })
 );
@@ -38,8 +54,18 @@ app.use(
 // BODY PARSING
 // =====================================================
 
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.json({
+    limit: "10kb",
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10kb",
+  })
+);
 
 app.use(cookieParser());
 
@@ -50,8 +76,10 @@ app.use(cookieParser());
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+
   standardHeaders: true,
   legacyHeaders: false,
+
   message: {
     success: false,
     message: "Too many requests. Please try again later.",
@@ -61,14 +89,35 @@ const apiLimiter = rateLimit({
 app.use("/api", apiLimiter);
 
 // =====================================================
+// REQUEST LOGGING - DEVELOPMENT
+// =====================================================
+
+if (NODE_ENV === "development") {
+  app.use((req, res, next) => {
+    const start = Date.now();
+
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+
+      console.log(
+        `${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`
+      );
+    });
+
+    next();
+  });
+}
+
+// =====================================================
 // ROOT
 // =====================================================
 
 app.get("/", (req, res) => {
-  res.json({
+  res.status(200).json({
     success: true,
     message: "Welcome to DevFlow API",
     version: "1.0.0",
+    environment: NODE_ENV,
   });
 });
 
@@ -77,7 +126,7 @@ app.get("/", (req, res) => {
 // =====================================================
 
 app.get("/health", (req, res) => {
-  res.json({
+  res.status(200).json({
     success: true,
     message: "DevFlow API is healthy and running",
     environment: NODE_ENV,
@@ -86,7 +135,14 @@ app.get("/health", (req, res) => {
 });
 
 // =====================================================
-// 404
+// API ROUTES
+// =====================================================
+
+// Authentication
+app.use("/api/auth", authRoutes);
+
+// =====================================================
+// 404 HANDLER
 // =====================================================
 
 app.use((req, res) => {
@@ -97,18 +153,86 @@ app.use((req, res) => {
 });
 
 // =====================================================
-// ERROR HANDLER
+// GLOBAL ERROR HANDLER
 // =====================================================
 
 app.use((error, req, res, next) => {
-  console.error("Unhandled error:", error);
+  console.error("");
+  console.error("✗ Unhandled error");
 
-  res.status(error.statusCode || 500).json({
+  if (error.stack) {
+    console.error(error.stack);
+  } else {
+    console.error(error);
+  }
+
+  // -----------------------------------------------
+  // Mongoose validation error
+  // -----------------------------------------------
+
+  if (error.name === "ValidationError") {
+    const errors = Object.values(error.errors).map(
+      (item) => item.message
+    );
+
+    return res.status(400).json({
+      success: false,
+      message: "Validation failed",
+      errors,
+    });
+  }
+
+  // -----------------------------------------------
+  // Mongoose duplicate key error
+  // -----------------------------------------------
+
+  if (error.code === 11000) {
+    const fields = Object.keys(error.keyPattern || {});
+
+    return res.status(409).json({
+      success: false,
+      message: fields.length
+        ? `${fields.join(", ")} already exists`
+        : "Duplicate resource",
+    });
+  }
+
+  // -----------------------------------------------
+  // JSON parse error
+  // -----------------------------------------------
+
+  if (
+    error instanceof SyntaxError &&
+    error.status === 400 &&
+    error.type === "entity.parse.failed"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid JSON payload",
+    });
+  }
+
+  // -----------------------------------------------
+  // Rate limit error
+  // -----------------------------------------------
+
+  if (error.status === 429) {
+    return res.status(429).json({
+      success: false,
+      message: "Too many requests. Please try again later.",
+    });
+  }
+
+  // -----------------------------------------------
+  // Default error
+  // -----------------------------------------------
+
+  return res.status(error.statusCode || error.status || 500).json({
     success: false,
     message:
       NODE_ENV === "production"
         ? "Internal server error"
-        : error.message,
+        : error.message || "Internal server error",
   });
 });
 
@@ -119,41 +243,143 @@ app.use((error, req, res, next) => {
 const startServer = async () => {
   try {
     console.log("");
+    console.log("========================================");
     console.log("🚀 DevFlow Backend Starting...");
-    console.log(`   Environment: ${NODE_ENV}`);
-    console.log(`   Port: ${PORT}`);
+    console.log("========================================");
+
+    console.log(`Environment : ${NODE_ENV}`);
+    console.log(`Port        : ${PORT}`);
+    console.log(`Client URL  : ${CLIENT_URL}`);
+
+    // -----------------------------------------------
+    // MongoDB
+    // -----------------------------------------------
 
     await connectDatabase();
+
+    // -----------------------------------------------
+    // Redis
+    // -----------------------------------------------
+
     await connectRedis();
+
+    // -----------------------------------------------
+    // HTTP Server
+    // -----------------------------------------------
 
     const server = app.listen(PORT, () => {
       console.log("");
+      console.log("✓ MongoDB connected");
+      console.log("✓ Redis connected");
       console.log(`✓ DevFlow API running on port ${PORT}`);
       console.log(`✓ http://localhost:${PORT}`);
       console.log("");
+      console.log("Available endpoints:");
+      console.log(`  GET  /`);
+      console.log(`  GET  /health`);
+      console.log(`  POST /api/auth/register`);
+      console.log(`  POST /api/auth/login`);
+      console.log(`  GET  /api/auth/me`);
+      console.log(`  POST /api/auth/logout`);
+      console.log("");
+      console.log("========================================");
+      console.log("DevFlow Backend Ready");
+      console.log("========================================");
+      console.log("");
     });
 
+    // =================================================
+    // GRACEFUL SHUTDOWN
+    // =================================================
+
+    let isShuttingDown = false;
+
     const gracefulShutdown = async (signal) => {
-      console.log(`\n→ ${signal} received. Shutting down...`);
+      if (isShuttingDown) {
+        return;
+      }
+
+      isShuttingDown = true;
+
+      console.log("");
+      console.log(`→ ${signal} received.`);
+      console.log("→ Starting graceful shutdown...");
 
       server.close(async () => {
-        await disconnectRedis();
-        await disconnectDatabase();
+        try {
+          await disconnectRedis();
+          await disconnectDatabase();
 
-        console.log("✓ DevFlow shutdown complete");
-        process.exit(0);
+          console.log("✓ Redis disconnected");
+          console.log("✓ MongoDB disconnected");
+          console.log("✓ DevFlow shutdown complete");
+          console.log("");
+
+          process.exit(0);
+        } catch (error) {
+          console.error(
+            "✗ Error during shutdown:",
+            error.message
+          );
+
+          process.exit(1);
+        }
       });
+
+      // Force shutdown after 10 seconds
+      setTimeout(() => {
+        console.error(
+          "✗ Graceful shutdown timed out. Forcing exit."
+        );
+
+        process.exit(1);
+      }, 10000).unref();
     };
 
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => {
+      gracefulShutdown("SIGINT");
+    });
+
+    process.on("SIGTERM", () => {
+      gracefulShutdown("SIGTERM");
+    });
+
+    // =================================================
+    // UNHANDLED ERRORS
+    // =================================================
+
+    process.on("unhandledRejection", (reason) => {
+      console.error("");
+      console.error("✗ Unhandled Promise Rejection:");
+
+      if (reason instanceof Error) {
+        console.error(reason.stack || reason.message);
+      } else {
+        console.error(reason);
+      }
+    });
+
+    process.on("uncaughtException", (error) => {
+      console.error("");
+      console.error("✗ Uncaught Exception:");
+      console.error(error.stack || error.message);
+
+      gracefulShutdown("uncaughtException");
+    });
   } catch (error) {
     console.error("");
+    console.error("========================================");
     console.error("✗ DevFlow failed to start");
-    console.error(`  ${error.message}`);
+    console.error("========================================");
+    console.error(error.stack || error.message);
+    console.error("");
 
     process.exit(1);
   }
 };
+
+// =====================================================
+// START APPLICATION
+// =====================================================
 
 startServer();
