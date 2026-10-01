@@ -13,7 +13,6 @@ import {
 } from "react-icons/fi";
 
 import {
-  NavLink,
   useLocation,
   useNavigate,
 } from "react-router-dom";
@@ -42,6 +41,7 @@ const navigation = [
       },
     ],
   },
+
   {
     label: "Engineering",
     items: [
@@ -67,6 +67,7 @@ const navigation = [
       },
     ],
   },
+
   {
     label: "Workspace",
     items: [
@@ -90,7 +91,7 @@ const navigation = [
 
 const getOrganizationIdFromPath = (pathname) => {
   const match = pathname.match(
-    /\/organizations\/([^/]+)/
+    /^\/organizations\/([^/]+)/
   );
 
   return match?.[1] || null;
@@ -98,7 +99,7 @@ const getOrganizationIdFromPath = (pathname) => {
 
 const getProjectIdFromPath = (pathname) => {
   const match = pathname.match(
-    /\/projects\/([^/]+)/
+    /^\/organizations\/[^/]+\/projects\/([^/]+)/
   );
 
   return match?.[1] || null;
@@ -114,6 +115,8 @@ const Sidebar = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const pathname = location.pathname;
 
   // =======================================================
   // AUTH
@@ -153,13 +156,18 @@ const Sidebar = ({
   );
 
   // =======================================================
-  // CURRENT ORGANIZATION
+  // PATH IDs
   // =======================================================
 
   const pathOrganizationId =
-    getOrganizationIdFromPath(
-      location.pathname
-    );
+    getOrganizationIdFromPath(pathname);
+
+  const pathProjectId =
+    getProjectIdFromPath(pathname);
+
+  // =======================================================
+  // CURRENT ORGANIZATION
+  // =======================================================
 
   const displayOrganization =
     currentOrganization ||
@@ -178,11 +186,6 @@ const Sidebar = ({
   // =======================================================
   // CURRENT PROJECT
   // =======================================================
-
-  const pathProjectId =
-    getProjectIdFromPath(
-      location.pathname
-    );
 
   const displayProject =
     currentProject ||
@@ -218,141 +221,165 @@ const Sidebar = ({
   };
 
   // =======================================================
+  // SAFE NAVIGATION
+  // =======================================================
+
+  const goTo = (path) => {
+    handleClose();
+    navigate(path);
+  };
+
+  // =======================================================
   // NAVIGATION HANDLER
   // =======================================================
 
   const handleNavigation = (type) => {
     handleClose();
 
-    switch (type) {
-      // ---------------------------------------------------
-      // DASHBOARD
-      // ---------------------------------------------------
+    // =====================================================
+    // DASHBOARD
+    // =====================================================
 
-      case "dashboard":
-        navigate("/dashboard");
-        break;
-
-      // ---------------------------------------------------
-      // ORGANIZATIONS
-      // ---------------------------------------------------
-
-      case "organizations":
-        navigate("/organizations");
-        break;
-
-      // ---------------------------------------------------
-      // PROJECTS
-      // ---------------------------------------------------
-
-      case "projects":
-        if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}/projects`
-          );
-        } else {
-          navigate("/organizations");
-        }
-        break;
-
-      // ---------------------------------------------------
-      // SERVICES
-      // ---------------------------------------------------
-
-      case "services":
-        if (
-          organizationId &&
-          projectId
-        ) {
-          navigate(
-            `/organizations/${organizationId}/projects/${projectId}/services`
-          );
-        } else if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}/projects`
-          );
-        } else {
-          navigate("/organizations");
-        }
-        break;
-
-      // ---------------------------------------------------
-      // TEAMS
-      // ---------------------------------------------------
-
-      case "teams":
-        if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}/members`
-          );
-        } else {
-          navigate("/organizations");
-        }
-        break;
-
-      // ---------------------------------------------------
-      // ACTIVITY
-      // ---------------------------------------------------
-
-      case "activity":
-        /*
-         * Activity page is not yet present in the
-         * current router.
-         *
-         * For now open the current workspace instead
-         * of navigating to a non-existing route.
-         */
-        if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}`
-          );
-        } else {
-          navigate("/dashboard");
-        }
-        break;
-
-      // ---------------------------------------------------
-      // INCIDENTS
-      // ---------------------------------------------------
-
-      case "incidents":
-        /*
-         * Incident module is not yet present in the
-         * current router.
-         *
-         * Temporary safe destination.
-         */
-        if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}`
-          );
-        } else {
-          navigate("/dashboard");
-        }
-        break;
-
-      // ---------------------------------------------------
-      // SETTINGS
-      // ---------------------------------------------------
-
-      case "settings":
-        /*
-         * Global /settings does not currently exist.
-         *
-         * Organization settings does.
-         */
-        if (organizationId) {
-          navigate(
-            `/organizations/${organizationId}/settings`
-          );
-        } else {
-          navigate("/organizations");
-        }
-        break;
-
-      default:
-        navigate("/dashboard");
+    if (type === "dashboard") {
+      navigate("/dashboard");
+      return;
     }
+
+    // =====================================================
+    // ORGANIZATIONS
+    // =====================================================
+
+    if (type === "organizations") {
+      navigate("/organizations");
+      return;
+    }
+
+    // =====================================================
+    // PROJECTS
+    // =====================================================
+
+    if (type === "projects") {
+      if (!organizationId) {
+        navigate("/organizations");
+        return;
+      }
+
+      navigate(
+        `/organizations/${organizationId}/projects`
+      );
+
+      return;
+    }
+
+    // =====================================================
+    // SERVICES
+    // =====================================================
+
+    if (type === "services") {
+      if (!organizationId) {
+        navigate("/organizations");
+        return;
+      }
+
+      if (!projectId) {
+        navigate(
+          `/organizations/${organizationId}/projects`
+        );
+
+        return;
+      }
+
+      navigate(
+        `/organizations/${organizationId}/projects/${projectId}/services`
+      );
+
+      return;
+    }
+
+    // =====================================================
+    // TEAMS
+    // =====================================================
+
+    if (type === "teams") {
+      if (!organizationId) {
+        navigate("/organizations");
+        return;
+      }
+
+      navigate(
+        `/organizations/${organizationId}/members`
+      );
+
+      return;
+    }
+
+    // =====================================================
+    // ACTIVITY
+    // =====================================================
+
+    if (type === "activity") {
+      /*
+       * Activity route abhi AppRouter me available nahi hai.
+       *
+       * Isliye current organization overview open hoga.
+       */
+
+      if (organizationId) {
+        navigate(
+          `/organizations/${organizationId}`
+        );
+      } else {
+        navigate("/dashboard");
+      }
+
+      return;
+    }
+
+    // =====================================================
+    // INCIDENTS
+    // =====================================================
+
+    if (type === "incidents") {
+      /*
+       * Incidents route abhi AppRouter me available nahi hai.
+       *
+       * Temporary safe destination:
+       * organization overview.
+       */
+
+      if (organizationId) {
+        navigate(
+          `/organizations/${organizationId}`
+        );
+      } else {
+        navigate("/dashboard");
+      }
+
+      return;
+    }
+
+    // =====================================================
+    // SETTINGS
+    // =====================================================
+
+    if (type === "settings") {
+      if (!organizationId) {
+        navigate("/organizations");
+        return;
+      }
+
+      navigate(
+        `/organizations/${organizationId}/settings`
+      );
+
+      return;
+    }
+
+    // =====================================================
+    // FALLBACK
+    // =====================================================
+
+    navigate("/dashboard");
   };
 
   // =======================================================
@@ -362,6 +389,11 @@ const Sidebar = ({
   const handleLogout = async () => {
     try {
       await logout();
+    } catch (error) {
+      console.error(
+        "Logout failed:",
+        error
+      );
     } finally {
       handleClose();
 
@@ -376,52 +408,82 @@ const Sidebar = ({
   // =======================================================
 
   const isItemActive = (type) => {
-    const pathname = location.pathname;
+    // -----------------------------------------------------
+    // DASHBOARD
+    // -----------------------------------------------------
 
-    switch (type) {
-      case "dashboard":
-        return pathname === "/dashboard";
+    if (type === "dashboard") {
+      return pathname === "/dashboard";
+    }
 
-      case "organizations":
-        return (
-          pathname === "/organizations" ||
+    // -----------------------------------------------------
+    // ORGANIZATIONS
+    // -----------------------------------------------------
+
+    if (type === "organizations") {
+      return (
+        pathname === "/organizations" ||
+        (
           pathname.startsWith(
             "/organizations/"
           ) &&
           !pathname.includes("/projects")
-        );
-
-      case "projects":
-        return pathname.includes(
-          "/projects"
-        ) && !pathname.includes("/services");
-
-      case "services":
-        return pathname.includes(
-          "/services"
-        );
-
-      case "teams":
-        return pathname.includes(
-          "/members"
-        );
-
-      case "settings":
-        return pathname.includes(
-          "/settings"
-        );
-
-      case "activity":
-        return pathname === "/activity";
-
-      case "incidents":
-        return pathname.startsWith(
-          "/incidents"
-        );
-
-      default:
-        return false;
+        )
+      );
     }
+
+    // -----------------------------------------------------
+    // PROJECTS
+    // -----------------------------------------------------
+
+    if (type === "projects") {
+      return (
+        pathname.includes("/projects") &&
+        !pathname.includes("/services")
+      );
+    }
+
+    // -----------------------------------------------------
+    // SERVICES
+    // -----------------------------------------------------
+
+    if (type === "services") {
+      return pathname.includes("/services");
+    }
+
+    // -----------------------------------------------------
+    // TEAMS
+    // -----------------------------------------------------
+
+    if (type === "teams") {
+      return pathname.includes("/members");
+    }
+
+    // -----------------------------------------------------
+    // SETTINGS
+    // -----------------------------------------------------
+
+    if (type === "settings") {
+      return pathname.includes("/settings");
+    }
+
+    // -----------------------------------------------------
+    // ACTIVITY
+    // -----------------------------------------------------
+
+    if (type === "activity") {
+      return pathname === "/activity";
+    }
+
+    // -----------------------------------------------------
+    // INCIDENTS
+    // -----------------------------------------------------
+
+    if (type === "incidents") {
+      return pathname.startsWith("/incidents");
+    }
+
+    return false;
   };
 
   // =======================================================
@@ -430,9 +492,14 @@ const Sidebar = ({
 
   return (
     <aside
-      className={`flex h-full w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950 ${
-        mobile ? "" : "hidden lg:flex"
-      }`}
+      className={[
+        "flex h-full w-64 shrink-0 flex-col",
+        "border-r border-slate-800",
+        "bg-slate-950",
+        mobile
+          ? ""
+          : "hidden lg:flex",
+      ].join(" ")}
     >
       {/* ===================================================
           BRAND
@@ -441,10 +508,9 @@ const Sidebar = ({
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 px-5">
         <button
           type="button"
-          onClick={() => {
-            handleClose();
-            navigate("/dashboard");
-          }}
+          onClick={() =>
+            goTo("/dashboard")
+          }
           className="flex items-center gap-3 rounded-lg outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-blue-500/50"
           aria-label="Go to DevFlow dashboard"
         >
@@ -482,10 +548,9 @@ const Sidebar = ({
       <div className="border-b border-slate-800 p-4">
         <button
           type="button"
-          onClick={() => {
-            handleClose();
-            navigate("/organizations");
-          }}
+          onClick={() =>
+            goTo("/organizations")
+          }
           aria-label="Open organizations"
           className="group flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5 text-left transition hover:border-slate-700 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         >
@@ -534,7 +599,7 @@ const Sidebar = ({
               {section.items.map((item) => {
                 const Icon = item.icon;
 
-                const isActive =
+                const active =
                   isItemActive(item.type);
 
                 return (
@@ -549,31 +614,38 @@ const Sidebar = ({
                     className={[
                       "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-150",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                      isActive
+
+                      active
                         ? "bg-blue-500/10 text-blue-400"
                         : "text-slate-400 hover:bg-slate-900 hover:text-white",
                     ].join(" ")}
                   >
                     {/* Active indicator */}
 
-                    {isActive && (
+                    {active && (
                       <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-blue-500" />
                     )}
+
+                    {/* Icon */}
 
                     <Icon
                       size={17}
                       className={
-                        isActive
+                        active
                           ? "text-blue-400"
                           : "text-slate-500 transition-colors group-hover:text-slate-300"
                       }
                     />
 
+                    {/* Label */}
+
                     <span className="flex-1 truncate">
                       {item.label}
                     </span>
 
-                    {isActive && (
+                    {/* Active dot */}
+
+                    {active && (
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400 shadow-sm shadow-blue-500/50" />
                     )}
                   </button>
@@ -619,16 +691,13 @@ const Sidebar = ({
       ==================================================== */}
 
       <div className="shrink-0 border-t border-slate-800 p-3">
+        {/* User / Settings */}
+
         <button
           type="button"
           onClick={() => {
             handleClose();
 
-            /*
-             * Profile page doesn't exist yet.
-             * Send user to organization settings
-             * until profile settings are implemented.
-             */
             if (organizationId) {
               navigate(
                 `/organizations/${organizationId}/settings`

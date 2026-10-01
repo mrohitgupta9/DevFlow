@@ -3,7 +3,6 @@ import {
   FiAlertTriangle,
   FiArrowRight,
   FiBox,
-  FiCheckCircle,
   FiChevronRight,
   FiClock,
   FiGitBranch,
@@ -15,7 +14,7 @@ import {
   FiZap,
 } from "react-icons/fi";
 import { Link } from "react-router-dom";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import useOrganizationStore from "../../stores/organizationStore";
 import useProjectStore from "../../stores/projectStore";
@@ -27,7 +26,7 @@ const Dashboard = () => {
   // =========================================================
 
   const {
-    organizations,
+    organizations = [],
     currentOrganization,
     isLoading: organizationLoading,
     error: organizationError,
@@ -35,51 +34,118 @@ const Dashboard = () => {
   } = useOrganizationStore();
 
   const {
-    projects,
+    projects = [],
     isLoading: projectLoading,
     error: projectError,
     fetchProjects,
   } = useProjectStore();
 
   const {
-    services,
+    services = [],
     isLoading: serviceLoading,
     error: serviceError,
     fetchServices,
   } = useServiceStore();
 
   // =========================================================
-  // CURRENT WORKSPACE
+  // LOCAL STATE
+  // =========================================================
+
+  const [selectedProjectId, setSelectedProjectId] =
+    useState(null);
+
+  const organizationsLoadedRef = useRef(false);
+  const projectsLoadedRef = useRef(null);
+  const servicesLoadedRef = useRef(null);
+
+  // =========================================================
+  // CURRENT ORGANIZATION
   // =========================================================
 
   const organization = useMemo(() => {
     return (
       currentOrganization ||
-      organizations?.[0] ||
+      organizations[0] ||
       null
     );
   }, [currentOrganization, organizations]);
 
-  const organizationId = organization?._id;
+  const organizationId = organization?._id || null;
 
   // =========================================================
   // LOAD ORGANIZATIONS
   // =========================================================
 
   useEffect(() => {
-    if (!organizations?.length) {
-      fetchOrganizations();
+    if (organizationsLoadedRef.current) {
+      return;
     }
-  }, [organizations?.length, fetchOrganizations]);
+
+    if (organizations.length > 0) {
+      organizationsLoadedRef.current = true;
+      return;
+    }
+
+    organizationsLoadedRef.current = true;
+
+    fetchOrganizations().catch((error) => {
+      console.error(
+        "Failed to load organizations:",
+        error
+      );
+
+      organizationsLoadedRef.current = false;
+    });
+  }, [organizations.length, fetchOrganizations]);
+
+  // =========================================================
+  // SELECT FIRST PROJECT
+  // =========================================================
+
+  useEffect(() => {
+    if (!projects.length) {
+      setSelectedProjectId(null);
+      return;
+    }
+
+    setSelectedProjectId((currentId) => {
+      const exists = projects.some(
+        (project) => project._id === currentId
+      );
+
+      if (exists) {
+        return currentId;
+      }
+
+      return projects[0]?._id || null;
+    });
+  }, [projects]);
 
   // =========================================================
   // LOAD PROJECTS
   // =========================================================
 
   useEffect(() => {
-    if (!organizationId) return;
+    if (!organizationId) {
+      return;
+    }
 
-    fetchProjects(organizationId);
+    if (
+      projectsLoadedRef.current === organizationId
+    ) {
+      return;
+    }
+
+    projectsLoadedRef.current = organizationId;
+
+    fetchProjects(organizationId).catch((error) => {
+      console.error(
+        "Failed to load projects:",
+        error
+      );
+
+      projectsLoadedRef.current = null;
+    });
   }, [organizationId, fetchProjects]);
 
   // =========================================================
@@ -87,51 +153,88 @@ const Dashboard = () => {
   // =========================================================
 
   useEffect(() => {
-    if (!organizationId || !projects?.length) return;
+    if (
+      !organizationId ||
+      !selectedProjectId
+    ) {
+      return;
+    }
 
-    const firstProject = projects[0];
+    const servicesKey = `${organizationId}:${selectedProjectId}`;
 
-    if (!firstProject?._id) return;
+    if (
+      servicesLoadedRef.current === servicesKey
+    ) {
+      return;
+    }
+
+    servicesLoadedRef.current = servicesKey;
 
     fetchServices(
       organizationId,
-      firstProject._id
-    );
+      selectedProjectId
+    ).catch((error) => {
+      console.error(
+        "Failed to load services:",
+        error
+      );
+
+      servicesLoadedRef.current = null;
+    });
   }, [
     organizationId,
-    projects,
+    selectedProjectId,
     fetchServices,
   ]);
 
   // =========================================================
-  // DERIVED DATA
+  // SELECTED PROJECT
   // =========================================================
 
-  const projectCount = projects?.length || 0;
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId) {
+      return projects[0] || null;
+    }
 
-  const serviceCount = services?.length || 0;
+    return (
+      projects.find(
+        (project) =>
+          project._id === selectedProjectId
+      ) || projects[0] || null
+    );
+  }, [projects, selectedProjectId]);
 
-  const activeProjectCount =
-    projects?.filter(
-      (project) => project.status === "active"
-    ).length || 0;
+  // =========================================================
+  // COUNTS
+  // =========================================================
 
-  const activeServiceCount =
-    services?.filter(
-      (service) => service.status === "active"
-    ).length || 0;
+  const projectCount = projects.length;
 
-  const archivedProjectCount =
-    projects?.filter(
-      (project) => project.status === "archived"
-    ).length || 0;
+  const serviceCount = services.length;
 
-  const inactiveServiceCount =
-    services?.filter(
-      (service) => service.status !== "active"
-    ).length || 0;
+  const activeProjectCount = projects.filter(
+    (project) =>
+      project.status === "active"
+  ).length;
 
-  const firstProject = projects?.[0] || null;
+  const archivedProjectCount = projects.filter(
+    (project) =>
+      project.status === "archived"
+  ).length;
+
+  const activeServiceCount = services.filter(
+    (service) =>
+      service.status === "active"
+  ).length;
+
+  const inactiveServiceCount = services.filter(
+    (service) =>
+      service.status !== "active"
+  ).length;
+
+  // =========================================================
+  // GLOBAL STATES
+  // =========================================================
 
   const isLoading =
     organizationLoading ||
@@ -152,12 +255,16 @@ const Dashboard = () => {
     : "/organizations";
 
   const servicesRoute =
-    organizationId && firstProject?._id
-      ? `/organizations/${organizationId}/projects/${firstProject._id}/services`
+    organizationId && selectedProject?._id
+      ? `/organizations/${organizationId}/projects/${selectedProject._id}/services`
       : projectsRoute;
 
   const membersRoute = organizationId
     ? `/organizations/${organizationId}/members`
+    : "/organizations";
+
+  const organizationRoute = organizationId
+    ? `/organizations/${organizationId}`
     : "/organizations";
 
   // =========================================================
@@ -172,7 +279,9 @@ const Dashboard = () => {
         projectCount === 0
           ? "No projects created yet"
           : `${activeProjectCount} active project${
-              activeProjectCount === 1 ? "" : "s"
+              activeProjectCount === 1
+                ? ""
+                : "s"
             }`,
       icon: FiBox,
       href: projectsRoute,
@@ -184,7 +293,9 @@ const Dashboard = () => {
         serviceCount === 0
           ? "No services registered yet"
           : `${activeServiceCount} active service${
-              activeServiceCount === 1 ? "" : "s"
+              activeServiceCount === 1
+                ? ""
+                : "s"
             }`,
       icon: FiServer,
       href: servicesRoute,
@@ -192,14 +303,16 @@ const Dashboard = () => {
     {
       label: "Active Incidents",
       value: "—",
-      description: "Incident monitoring not configured",
+      description:
+        "Incident monitoring not configured",
       icon: FiAlertTriangle,
       href: null,
     },
     {
       label: "Activity",
       value: "—",
-      description: "Audit activity will appear here",
+      description:
+        "Audit activity will appear here",
       icon: FiActivity,
       href: null,
     },
@@ -220,15 +333,14 @@ const Dashboard = () => {
     },
     {
       title: "Add service",
-      description:
-        firstProject
-          ? `Register a service in ${firstProject.name}`
-          : "Create a project before adding services",
+      description: selectedProject
+        ? `Register a service in ${selectedProject.name}`
+        : "Create a project before adding services",
       icon: FiServer,
       href: servicesRoute,
       disabled:
         !organizationId ||
-        !firstProject?._id,
+        !selectedProject?._id,
     },
     {
       title: "Manage team",
@@ -243,32 +355,31 @@ const Dashboard = () => {
       description:
         "Configure your organization settings",
       icon: FiGitBranch,
-      href: organizationId
-        ? `/organizations/${organizationId}`
-        : "/organizations",
+      href: organizationRoute,
       disabled: false,
     },
   ];
 
   // =========================================================
-  // LOADING STATE
+  // INITIAL LOADING
   // =========================================================
 
-  if (isLoading && !organization) {
-    return (
-      <div className="min-h-full bg-slate-950 p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-7xl">
-          <DashboardSkeleton />
-        </div>
-      </div>
-    );
+  if (
+    organizationLoading &&
+    !organization
+  ) {
+    return <DashboardSkeleton />;
   }
 
   // =========================================================
-  // ERROR STATE
+  // ERROR
   // =========================================================
 
-  if (error && !organization) {
+  if (
+    error &&
+    !organization &&
+    !organizationLoading
+  ) {
     return (
       <div className="min-h-full bg-slate-950 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center">
@@ -287,7 +398,18 @@ const Dashboard = () => {
 
             <button
               type="button"
-              onClick={() => fetchOrganizations()}
+              onClick={() => {
+                organizationsLoadedRef.current =
+                  false;
+
+                projectsLoadedRef.current =
+                  null;
+
+                servicesLoadedRef.current =
+                  null;
+
+                fetchOrganizations();
+              }}
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500"
             >
               Try again
@@ -343,19 +465,13 @@ const Dashboard = () => {
     <div className="min-h-full bg-slate-950 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
 
-        {/* ===================================================
-            HEADER
-        ==================================================== */}
-
+        {/* HEADER */}
         <div className="mb-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-400">
                 <FiZap size={14} />
-
-                <span>
-                  Engineering Overview
-                </span>
+                <span>Engineering Overview</span>
               </div>
 
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
@@ -372,7 +488,7 @@ const Dashboard = () => {
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 to="/organizations"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
               >
                 <FiGitBranch size={16} />
                 Workspaces
@@ -389,14 +505,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ===================================================
-            WORKSPACE BANNER
-        ==================================================== */}
-
+        {/* WORKSPACE */}
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
           <div className="p-5 sm:p-6">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
                   <FiGitBranch size={21} />
@@ -425,7 +537,7 @@ const Dashboard = () => {
                 </div>
 
                 <Link
-                  to={`/organizations/${organization._id}`}
+                  to={organizationRoute}
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 transition hover:text-blue-300"
                 >
                   Manage workspace
@@ -436,10 +548,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ===================================================
-            STATS
-        ==================================================== */}
-
+        {/* STATS */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
@@ -453,7 +562,7 @@ const Dashboard = () => {
                 }`}
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                  <div>
                     <p className="text-sm font-medium text-slate-400">
                       {stat.label}
                     </p>
@@ -467,7 +576,7 @@ const Dashboard = () => {
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-blue-500/10 bg-blue-500/10 p-3 text-blue-400 transition group-hover:bg-blue-500/15">
+                  <div className="rounded-xl border border-blue-500/10 bg-blue-500/10 p-3 text-blue-400">
                     <Icon size={20} />
                   </div>
                 </div>
@@ -496,18 +605,12 @@ const Dashboard = () => {
           })}
         </div>
 
-        {/* ===================================================
-            MAIN GRID
-        ==================================================== */}
-
+        {/* MAIN GRID */}
         <div className="mt-6 grid gap-6 xl:grid-cols-3">
 
-          {/* -----------------------------------------------
-              PROJECTS / SERVICES OVERVIEW
-          ------------------------------------------------ */}
-
+          {/* PROJECTS */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6 xl:col-span-2">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
                   <FiLayers
@@ -521,21 +624,29 @@ const Dashboard = () => {
                 </div>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Projects and services currently registered
-                  in this workspace.
+                  Projects currently registered in this workspace.
                 </p>
               </div>
 
               <Link
                 to={projectsRoute}
-                className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 transition hover:text-white"
+                className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white"
               >
                 View projects
                 <FiArrowRight size={14} />
               </Link>
             </div>
 
-            {projectCount === 0 ? (
+            {projectLoading ? (
+              <div className="mt-6 space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="h-16 animate-pulse rounded-xl bg-slate-950"
+                  />
+                ))}
+              </div>
+            ) : projectCount === 0 ? (
               <div className="mt-6 flex min-h-56 items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/30">
                 <div className="max-w-sm px-6 text-center">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-600">
@@ -553,7 +664,7 @@ const Dashboard = () => {
 
                   <Link
                     to={projectsRoute}
-                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-500"
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500"
                   >
                     Create project
                     <FiArrowRight size={13} />
@@ -562,68 +673,52 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="mt-6 space-y-3">
-                {projects.slice(0, 4).map((project) => {
-                  const projectServices =
-                    project._id === firstProject?._id
-                      ? services
-                      : [];
+                {projects.slice(0, 4).map((project) => (
+                  <Link
+                    key={project._id}
+                    to={`/organizations/${organizationId}/projects/${project._id}`}
+                    className="group flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/30 p-4 transition hover:border-slate-700 hover:bg-slate-800/40"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-blue-400">
+                        <FiBox size={18} />
+                      </div>
 
-                  return (
-                    <Link
-                      key={project._id}
-                      to={`/organizations/${organizationId}/projects/${project._id}`}
-                      className="group flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/30 p-4 transition hover:border-slate-700 hover:bg-slate-800/40"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-blue-400">
-                          <FiBox size={18} />
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-medium text-slate-200">
-                              {project.name}
-                            </p>
-
-                            <span
-                              className={`hidden rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline-flex ${
-                                project.status === "active"
-                                  ? "bg-emerald-500/10 text-emerald-400"
-                                  : "bg-amber-500/10 text-amber-400"
-                              }`}
-                            >
-                              {project.status}
-                            </span>
-                          </div>
-
-                          <p className="mt-1 truncate text-xs text-slate-600">
-                            {project.description ||
-                              "No project description"}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-slate-200">
+                            {project.name}
                           </p>
-                        </div>
-                      </div>
 
-                      <div className="flex shrink-0 items-center gap-3">
-                        {project._id === firstProject?._id && (
-                          <span className="hidden items-center gap-1.5 text-xs text-slate-500 sm:flex">
-                            <FiServer size={13} />
-                            {projectServices?.length || 0}
+                          <span
+                            className={`hidden rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline-flex ${
+                              project.status === "active"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-amber-500/10 text-amber-400"
+                            }`}
+                          >
+                            {project.status || "unknown"}
                           </span>
-                        )}
+                        </div>
 
-                        <FiChevronRight
-                          size={16}
-                          className="text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-slate-400"
-                        />
+                        <p className="mt-1 truncate text-xs text-slate-600">
+                          {project.description ||
+                            "No project description"}
+                        </p>
                       </div>
-                    </Link>
-                  );
-                })}
+                    </div>
+
+                    <FiChevronRight
+                      size={16}
+                      className="shrink-0 text-slate-700 group-hover:text-slate-400"
+                    />
+                  </Link>
+                ))}
 
                 {projectCount > 4 && (
                   <Link
                     to={projectsRoute}
-                    className="flex items-center justify-center rounded-xl border border-dashed border-slate-800 py-3 text-xs font-medium text-slate-500 transition hover:border-slate-700 hover:text-slate-300"
+                    className="flex items-center justify-center rounded-xl border border-dashed border-slate-800 py-3 text-xs font-medium text-slate-500 hover:text-slate-300"
                   >
                     View all {projectCount} projects
                     <FiArrowRight
@@ -636,10 +731,7 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* -----------------------------------------------
-              INCIDENT STATUS
-          ------------------------------------------------ */}
-
+          {/* INCIDENT */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
             <div className="flex items-start justify-between">
               <div>
@@ -669,33 +761,18 @@ const Dashboard = () => {
                   </p>
 
                   <p className="mt-1 text-xs leading-5 text-slate-600">
-                    Incident management is not configured
-                    yet.
+                    Incident management is not configured yet.
                   </p>
                 </div>
               </div>
             </div>
-
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/20 px-4 py-3">
-              <p className="text-xs leading-5 text-slate-500">
-                Once the incident system is connected,
-                active incidents, severity and affected
-                services will appear here.
-              </p>
-            </div>
           </div>
         </div>
 
-        {/* ===================================================
-            LOWER GRID
-        ==================================================== */}
-
+        {/* LOWER GRID */}
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
 
-          {/* -----------------------------------------------
-              QUICK ACTIONS
-          ------------------------------------------------ */}
-
+          {/* QUICK ACTIONS */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
             <div className="mb-5">
               <h2 className="font-semibold text-white">
@@ -726,7 +803,7 @@ const Dashboard = () => {
 
                       <FiArrowRight
                         size={15}
-                        className="text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-slate-400"
+                        className="text-slate-700"
                       />
                     </div>
 
@@ -763,10 +840,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* -----------------------------------------------
-              SYSTEM STATUS
-          ------------------------------------------------ */}
-
+          {/* PLATFORM STATUS */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
             <div className="mb-5 flex items-start justify-between">
               <div>
@@ -787,37 +861,25 @@ const Dashboard = () => {
 
             <div className="divide-y divide-slate-800">
               {[
-                {
-                  label: "Frontend",
-                  status: "Operational",
-                },
-                {
-                  label: "Backend API",
-                  status: "Operational",
-                },
-                {
-                  label: "Database",
-                  status: "Connected",
-                },
-                {
-                  label: "Redis",
-                  status: "Connected",
-                },
-              ].map((item) => (
+                ["Frontend", "Operational"],
+                ["Backend API", "Operational"],
+                ["Database", "Connected"],
+                ["Redis", "Connected"],
+              ].map(([label, status]) => (
                 <div
-                  key={item.label}
-                  className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0"
+                  key={label}
+                  className="flex items-center justify-between py-3.5"
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-2 w-2 rounded-full bg-emerald-400" />
 
                     <span className="text-sm text-slate-300">
-                      {item.label}
+                      {label}
                     </span>
                   </div>
 
                   <span className="text-xs text-emerald-400">
-                    {item.status}
+                    {status}
                   </span>
                 </div>
               ))}
@@ -831,20 +893,15 @@ const Dashboard = () => {
 
               <p className="text-xs leading-5 text-slate-500">
                 Infrastructure health will be connected
-                to live monitoring and service health checks
-                in the monitoring phase.
+                to live monitoring in the monitoring phase.
               </p>
             </div>
           </div>
         </div>
 
-        {/* ===================================================
-            WORKSPACE SUMMARY
-        ==================================================== */}
-
+        {/* SUMMARY */}
         <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
             <div className="flex items-start gap-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
                 <FiLayers size={20} />
@@ -887,22 +944,18 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ===================================================
-            FOOTER
-        ==================================================== */}
-
+        {/* FOOTER */}
         <div className="mt-6 flex flex-col gap-2 border-t border-slate-800 pt-5 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <FiClock size={13} />
 
             <span>
-              DevFlow workspace data is loaded from your
-              backend API.
+              DevFlow workspace data is loaded from your backend API.
             </span>
           </div>
 
           <Link
-            to={`/organizations/${organization._id}`}
+            to={organizationRoute}
             className="transition hover:text-slate-400"
           >
             Open workspace
@@ -932,39 +985,40 @@ const SummaryMetric = ({ label, value }) => {
 };
 
 // ===========================================================
-// DASHBOARD SKELETON
+// SKELETON
 // ===========================================================
 
 const DashboardSkeleton = () => {
   return (
-    <div className="animate-pulse">
-      <div className="mb-8">
-        <div className="h-3 w-40 rounded bg-slate-800" />
+    <div className="min-h-full bg-slate-950 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl animate-pulse">
 
-        <div className="mt-4 h-8 w-48 rounded bg-slate-800" />
+        <div className="mb-8">
+          <div className="h-3 w-40 rounded bg-slate-800" />
+          <div className="mt-4 h-8 w-48 rounded bg-slate-800" />
+          <div className="mt-3 h-4 w-full max-w-xl rounded bg-slate-900" />
+        </div>
 
-        <div className="mt-3 h-4 w-full max-w-xl rounded bg-slate-900" />
-      </div>
+        <div className="mb-6 h-28 rounded-2xl bg-slate-900" />
 
-      <div className="mb-6 h-28 rounded-2xl bg-slate-900" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((item) => (
+            <div
+              key={item}
+              className="h-36 rounded-2xl bg-slate-900"
+            />
+          ))}
+        </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((item) => (
-          <div
-            key={item}
-            className="h-36 rounded-2xl bg-slate-900"
-          />
-        ))}
-      </div>
+        <div className="mt-6 grid gap-6 xl:grid-cols-3">
+          <div className="h-80 rounded-2xl bg-slate-900 xl:col-span-2" />
+          <div className="h-80 rounded-2xl bg-slate-900" />
+        </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="h-80 rounded-2xl bg-slate-900 xl:col-span-2" />
-        <div className="h-80 rounded-2xl bg-slate-900" />
-      </div>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div className="h-64 rounded-2xl bg-slate-900" />
-        <div className="h-64 rounded-2xl bg-slate-900" />
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="h-64 rounded-2xl bg-slate-900" />
+          <div className="h-64 rounded-2xl bg-slate-900" />
+        </div>
       </div>
     </div>
   );

@@ -6,73 +6,64 @@ import {
   Routes,
 } from "react-router-dom";
 
-// =====================================================
+// =========================================================
 // AUTH
-// =====================================================
+// =========================================================
 
 import AuthInitializer from "./AuthInitializer";
 import ProtectedRoute from "./ProtectedRoute";
 import PublicRoute from "./PublicRoute";
 
-// =====================================================
+// =========================================================
 // LAYOUT
-// =====================================================
+// =========================================================
 
 import AppLayout from "../components/layout/app/AppLayout";
 
-// =====================================================
+// =========================================================
 // PUBLIC PAGES
-// =====================================================
+// =========================================================
 
 import Home from "../pages/home/Home";
-
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import ResetPassword from "../pages/auth/ResetPassword";
 
-// =====================================================
-// PROTECTED PAGES
-// =====================================================
+// =========================================================
+// DASHBOARD
+// =========================================================
 
 import Dashboard from "../pages/dashboard/Dashboard";
 
-// =====================================================
+// =========================================================
 // ORGANIZATIONS
-// =====================================================
+// =========================================================
 
 import Organizations from "../pages/organizations/Organizations";
 import OrganizationOverview from "../pages/organizations/OrganizationOverview";
 import OrganizationSettings from "../pages/organizations/OrganizationSettings";
 import Members from "../pages/organizations/Members";
 
-// =====================================================
+// =========================================================
 // PROJECTS
-// =====================================================
+// =========================================================
 
 import Projects from "../pages/projects/Projects";
 import ProjectOverview from "../pages/projects/ProjectOverview";
 import ProjectSettings from "../pages/projects/ProjectSettings";
 
-// =====================================================
+// =========================================================
 // SERVICES
-// =====================================================
+// =========================================================
 
 import Services from "../pages/services/Services";
 import ServiceOverview from "../pages/services/ServiceOverview";
 import ServiceSettings from "../pages/services/ServiceSettings";
 
-// =====================================================
+// =========================================================
 // PROTECTED APP LAYOUT
-// =====================================================
-//
-// AppLayout remains mounted while navigating between
-// protected pages.
-//
-// Sidebar + Topbar remain persistent.
-// Only <Outlet /> content changes.
-//
-// =====================================================
+// =========================================================
 
 const ProtectedAppLayout = () => {
   return (
@@ -84,24 +75,23 @@ const ProtectedAppLayout = () => {
   );
 };
 
-// =====================================================
+// =========================================================
 // APP ROUTER
-// =====================================================
+// =========================================================
 
 const AppRouter = () => {
   return (
     <BrowserRouter>
-
-      {/* =================================================
-          AUTHENTICATION INITIALIZATION
-      ================================================= */}
+      {/* ===================================================
+          AUTH INITIALIZATION
+      ==================================================== */}
 
       <AuthInitializer />
 
       <Routes>
 
         {/* =================================================
-            PUBLIC HOME
+            PUBLIC
         ================================================= */}
 
         <Route
@@ -110,7 +100,7 @@ const AppRouter = () => {
         />
 
         {/* =================================================
-            AUTH ROUTES
+            AUTH
         ================================================= */}
 
         <Route
@@ -165,21 +155,15 @@ const AppRouter = () => {
             element={<Organizations />}
           />
 
-          {/* Organization Overview */}
-
           <Route
             path="/organizations/:id"
             element={<OrganizationOverview />}
           />
 
-          {/* Organization Members */}
-
           <Route
             path="/organizations/:id/members"
             element={<Members />}
           />
-
-          {/* Organization Settings */}
 
           <Route
             path="/organizations/:id/settings"
@@ -190,21 +174,15 @@ const AppRouter = () => {
               PROJECTS
           ================================================= */}
 
-          {/* Project List */}
-
           <Route
             path="/organizations/:id/projects"
             element={<Projects />}
           />
 
-          {/* Project Overview */}
-
           <Route
             path="/organizations/:id/projects/:projectId"
             element={<ProjectOverview />}
           />
-
-          {/* Project Settings */}
 
           <Route
             path="/organizations/:id/projects/:projectId/settings"
@@ -215,21 +193,15 @@ const AppRouter = () => {
               SERVICES
           ================================================= */}
 
-          {/* Service List */}
-
           <Route
             path="/organizations/:id/projects/:projectId/services"
             element={<Services />}
           />
 
-          {/* Service Overview */}
-
           <Route
             path="/organizations/:id/projects/:projectId/services/:serviceId"
             element={<ServiceOverview />}
           />
-
-          {/* Service Settings */}
 
           <Route
             path="/organizations/:id/projects/:projectId/services/:serviceId/settings"
@@ -246,7 +218,7 @@ const AppRouter = () => {
           path="*"
           element={
             <Navigate
-              to="/"
+              to="/dashboard"
               replace
             />
           }
